@@ -4,29 +4,21 @@ Sends a message to Discord on every trade entry, exit, halt, and EOD summary.
 """
 
 import logging
-import json
-import urllib.request
 from datetime import datetime
 
 import pytz
+import requests
 
 log = logging.getLogger(__name__)
 ET = pytz.timezone("America/New_York")
 
-WEBHOOK_URL = "https://discord.com/api/webhooks/1493686531213234316/kIYUyJulwFt6ENVMSd5DgV0GSY0iOAII_uGHSS3ZCf2PQuMh3iMz2SxLQDi_x_6f_FC6"
+WEBHOOK_URL = "https://discord.com/api/webhooks/1493688011102359645/oU2HLGifmBBVsYu4CXBHII7DZg6I8uYgKoeF8VidhEbqKqiEs9Go79Bocp36PxCF_hKh"
 
 
 def _send(content: str):
     """Send a message to Discord via webhook."""
     try:
-        data = json.dumps({"content": content}).encode("utf-8")
-        req = urllib.request.Request(
-            WEBHOOK_URL,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=5)
+        requests.post(WEBHOOK_URL, json={"content": content}, timeout=5)
     except Exception as e:
         log.debug("Discord alert failed: %s", e)
 
