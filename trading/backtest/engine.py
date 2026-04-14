@@ -51,17 +51,23 @@ def run_backtest(df: pd.DataFrame, strategy: Strategy, symbol: str,
                  initial_capital: float = INITIAL_CAPITAL,
                  stop_loss_pct: float = STOP_LOSS_PCT,
                  take_profit_pct: float = TAKE_PROFIT_PCT,
-                 position_pct: float = MAX_POSITION_PCT) -> BacktestResult:
+                 position_pct: float = MAX_POSITION_PCT,
+                 slippage_per_share: float = None) -> BacktestResult:
     """Run a single backtest.
 
     The signal column should already be in df (from strategy.generate_signals).
     Execution happens on the NEXT bar's open after a signal change.
+
+    Args:
+        slippage_per_share: Override per-share slippage (default: use config value).
+            Useful for slippage stress testing.
     """
     if "signal" not in df.columns:
         raise ValueError("DataFrame must have 'signal' column")
 
     df = df.copy().reset_index(drop=True)
     n = len(df)
+    slippage = slippage_per_share if slippage_per_share is not None else SLIPPAGE_PER_SHARE
 
     # State tracking
     capital = initial_capital
@@ -120,9 +126,9 @@ def run_backtest(df: pd.DataFrame, strategy: Strategy, symbol: str,
             if exit_reason:
                 # Apply slippage to exit
                 if position > 0:
-                    fill_price = exec_price - SLIPPAGE_PER_SHARE
+                    fill_price = exec_price - slippage
                 else:
-                    fill_price = exec_price + SLIPPAGE_PER_SHARE
+                    fill_price = exec_price + slippage
 
                 shares = abs(position)
                 cost = shares * COMMISSION_PER_SHARE
@@ -160,9 +166,9 @@ def run_backtest(df: pd.DataFrame, strategy: Strategy, symbol: str,
                 if shares > 0:
                     # Apply slippage to entry
                     if prev_signal > 0:
-                        entry_price = exec_price + SLIPPAGE_PER_SHARE
+                        entry_price = exec_price + slippage
                     else:
-                        entry_price = exec_price - SLIPPAGE_PER_SHARE
+                        entry_price = exec_price - slippage
 
                     entry_cost = shares * COMMISSION_PER_SHARE
                     capital -= entry_cost
@@ -183,7 +189,7 @@ def run_backtest(df: pd.DataFrame, strategy: Strategy, symbol: str,
     # Close any remaining position at last bar
     if position != 0:
         last = df.iloc[-1]
-        fill = float(last["close"]) - SLIPPAGE_PER_SHARE * np.sign(position)
+        fill = float(last["close"]) - slippage * np.sign(position)
         shares = abs(position)
         if position > 0:
             pnl = (fill - entry_price) * shares

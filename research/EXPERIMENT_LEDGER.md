@@ -226,7 +226,7 @@ SPY-QQQ: 0.44, SPY-GLD: 0.35, SPY-XLE: 0.07, QQQ-GLD: 0.32, QQQ-XLE: 0.21
 - Adding either instrument dilutes QQQ's exceptional 4.20 Sharpe without compensation.
 - **Decision: REJECT both. SPY+QQQ remains the optimal portfolio.**
 
-### Updated Rejected Ideas Summary
+### Updated Rejected Ideas Summary (Phase 4)
 
 | Idea | Tested | Result | Reason |
 |------|--------|--------|--------|
@@ -238,6 +238,162 @@ SPY-QQQ: 0.44, SPY-GLD: 0.35, SPY-XLE: 0.07, QQQ-GLD: 0.32, QQQ-XLE: 0.21
 | XLK, XLV, SMH | Dev | All negative | No ORB edge on these ETFs |
 | TLT, EEM, USO | Dev | All negative/zero | No ORB edge |
 | ARKK, XLF | Dev | Weak (0.38-0.47) | Not worth pursuing |
+
+---
+
+## Phase 5: Genuinely New Strategy Search (Experiment 14)
+
+**Mission**: Find a completely different intraday edge that beats SPY+QQQ ORB on locked OOS.
+ORB is the protected baseline. New strategies must be structurally different.
+
+### Experiment 14: Full 280-combo screen (5 strategies x 8 variants x 7 instruments)
+
+**Strategies tested** (all structurally different from ORB):
+
+1. **Mean Reversion on Extreme Moves** — fade VWAP Z-score extremes with RSI confirmation
+2. **VWAP Trend Following** — sustained price above/below VWAP with volume confirmation
+3. **Volatility Compression Breakout** — Bollinger squeeze release trades
+4. **Intraday Momentum Score** — multi-factor composite (EMA alignment + VWAP + RSI + volume)
+5. **Gap Continuation** — enter in gap direction when gap holds after confirmation period
+
+**Instruments**: SPY, QQQ, GLD, XLE, XLK, SMH, TLT (7 instruments)
+**Variants per strategy**: 8 parameter combinations
+**Total tests**: 280 walk-forward evaluations on dev period (Jan-Nov 2025)
+**Runtime**: 885 seconds (parallelized across 6 CPU cores)
+
+#### Dev Period Results (walk-forward OOS Sharpe, best variant per strategy-instrument):
+
+| Strategy | SPY | QQQ | GLD | XLE | XLK | SMH | TLT |
+|----------|-----|-----|-----|-----|-----|-----|-----|
+| MeanRev | -1.13 | -0.81 | -1.20 | -1.77 | -0.89 | -0.83 | -5.18 |
+| VWAPTrend | **1.07** | **1.12** | 0.76 | -0.44 | 0.22 | **1.01** | -0.88 |
+| VolComp | -2.83 | -1.93 | -2.76 | -4.76 | -2.41 | -1.53 | -5.34 |
+| MomScore | 0.60 | 0.36 | -0.83 | -4.03 | -0.08 | -0.61 | -6.66 |
+| GapCont | -0.45 | -1.03 | **1.98** | -0.43 | -1.95 | -1.78 | 0.32 |
+
+**Dev period verdicts:**
+- **MeanRev**: DEAD. Uniformly negative across all 56 combos. VWAP Z-score mean reversion does not work intraday.
+- **VWAPTrend**: ALIVE on SPY (1.07), QQQ (1.12), SMH (1.01). Dead on XLE, TLT. Modest edge.
+- **VolComp**: DEAD. Uniformly negative across all 56 combos. Bollinger squeeze has no intraday edge.
+- **MomScore**: BARELY ALIVE. Only SPY/atr25 (0.60) above 0.5. Too many trades, tiny alpha per trade.
+- **GapCont**: ALIVE ON GLD ONLY. 8/8 GLD variants positive (0.61-1.98). Dead on all other instruments. Gap continuation works on gold because GLD has strong overnight-gap persistence.
+
+#### Locked OOS Confirmation (Dec 2025 - Apr 2026):
+
+Top 8 candidates tested with frozen configs:
+
+| Strategy/Variant | Sym | Dev Sharpe | **OOS Sharpe** | OOS Alpha | OOS Return | Verdict |
+|-----------------|-----|-----------|----------------|-----------|------------|---------|
+| GapCont/atr25 | GLD | 1.48 | **-1.55** | -3.7% | -1.31% | **FAIL** |
+| GapCont/t0.4_s0.20 | GLD | 1.45 | **-1.32** | -3.0% | -1.00% | **FAIL** |
+| GapCont/default | GLD | 1.19 | **-1.53** | -3.7% | -1.32% | **FAIL** |
+| VWAPTrend/atr25 | QQQ | 1.50 | **-1.04** | -3.2% | -0.94% | **FAIL** |
+| VWAPTrend/conf5 | SPY | 1.43 | **-1.68** | -4.4% | -1.58% | **FAIL** |
+| **VWAPTrend/atr25** | **SMH** | **1.08** | **1.70** | **+8.1%** | **+2.91%** | **PASS** |
+| VWAPTrend/vol1.2 | QQQ | 1.47 | **-1.25** | -3.9% | -1.23% | **FAIL** |
+| MomScore/atr25 | SPY | 0.62 | **-3.92** | -6.7% | -2.21% | **FAIL** |
+
+**Only 1 of 8 candidates passed locked OOS: VWAPTrend/atr25 on SMH (Sharpe 1.70, alpha +8.1%).**
+
+#### Portfolio Combination (locked OOS):
+
+| Config | Locked OOS Sharpe | Delta vs Baseline |
+|--------|------------------|-------------------|
+| **SPY+QQQ ORB (baseline)** | **3.35** | — |
+| SPY+QQQ ORB + VWAPTrend/SMH | 2.78 | **-0.57** |
+
+**Adding VWAPTrend/SMH HURTS the portfolio** (Sharpe drops from 3.35 to 2.78).
+Reason: 0.51 correlation with baseline erases diversification benefit, and SMH's
+1.70 Sharpe is weaker than the portfolio's 3.35.
+
+### Experiment 14 Final Rejected Ideas
+
+| Idea | Tested | Dev | OOS | Reason |
+|------|--------|-----|-----|--------|
+| Mean Reversion (VWAP Z-score) | 56 combos | All negative | N/A | No intraday mean-rev edge exists |
+| VWAP Trend on SPY | 8 variants | Best 1.07 | **-1.68** | Overfit to dev regime |
+| VWAP Trend on QQQ | 8 variants | Best 1.12 | **-1.04** | Overfit to dev regime |
+| VWAP Trend on SMH | 8 variants | Best 1.01 | **1.70** | PASS alone, but HURTS portfolio |
+| Volatility Compression | 56 combos | All negative | N/A | Bollinger squeeze has no edge |
+| Momentum Score | 56 combos | Best 0.60 | **-3.92** | Tiny alpha, massive overfit |
+| Gap Continuation on GLD | 8 variants | Best 1.98 | **-1.55** | Dev-period overfit |
+| Gap Continuation (other) | 48 combos | All negative | N/A | GLD-specific, and GLD overfit |
+
+---
+
+## Phase 6: Wave 2 New Strategy Search (Experiment 15)
+
+**Mission continues**: 4 more genuinely different strategy families tested.
+
+### Experiment 15: Wave 2 screen (4 strategies + pairs, 192 walk-forward tests)
+
+**Strategies tested:**
+
+1. **Prior-Day Level Reversal** — fade at yesterday's high/low/close with RSI exhaustion
+2. **Opening Drive Continuation** — first 5-min move predicts the day; enter in drive direction
+3. **Pairs Spread Mean Reversion** — trade log-spread between correlated ETFs
+4. **Intraday Range Expansion** — narrow-range bar clusters predict breakouts (pattern-based)
+
+**Pairs tested**: SPY/QQQ, QQQ/SPY, GLD/TLT, XLK/SMH
+**Total tests**: 192 walk-forward evaluations on dev period
+**Runtime**: 2114 seconds (parallelized across 6 cores)
+
+#### Dev Period Top Results:
+
+| Strategy | Variant | Sym | Dev Sharpe | Trades |
+|----------|---------|-----|-----------|--------|
+| OpenDrive | 5m_tgt1.5x | XLK | 1.52 | 143 |
+| RangeExp | nr10_3bars | SPY | 1.40 | 71 |
+| Pairs | XLKvSMH_z2.5 | XLK | 1.34 | 399 |
+| OpenDrive | 5m_gap_align | SMH | 1.25 | 70 |
+| OpenDrive | 5m_tgt3x | SMH | 1.18 | 159 |
+| Pairs | XLKvSMH_z1.5 | XLK | 1.13 | 1100 |
+| Pairs | XLKvSMH_z2.0_look120 | XLK | 1.11 | 408 |
+| Pairs | SPYvQQQ_z2.5 | SPY | 1.10 | 391 |
+| Pairs | GLDvTLT_look120 | GLD | 1.08 | 401 |
+
+**Dev-period observations:**
+- **OpeningDrive**: Strong on tech ETFs (XLK, SMH). 5-min drive captures genuine momentum.
+- **Pairs**: Broadly positive. XLK/SMH best (6/6 variants positive). SPY/QQQ positive. GLD/TLT one variant.
+- **PriorDayReversal**: Weak. Only 2 hits (SPY 0.70, XLK 0.64). Marginal.
+- **RangeExpansion**: SPY hit (1.40) but very low trade count variants. Only 71 trades for best.
+
+#### Locked OOS Confirmation (Dec 2025 - Apr 2026):
+
+**CRITICAL RESULTS — multiple strategies PASS locked OOS:**
+
+| Candidate | Dev Sharpe | **OOS Sharpe** | **OOS Sortino** | OOS Return | MaxDD | Trades | PF | Alpha | Beta | Verdict |
+|-----------|-----------|---------------|----------------|------------|-------|--------|----|-------|------|---------|
+| **Pairs/GLDvTLT_look120** | 0.49 | **4.86** | **7.09** | **+5.31%** | -0.91% | 228 | 1.66 | +15.1% | 0.002 | **PASS** |
+| **OpenDrive/5m_tgt3x/SMH** | 1.33 | **3.87** | **15.05** | **+5.83%** | -1.41% | 86 | 1.91 | +17.1% | -0.026 | **PASS** |
+| **OpenDrive/5m_tgt1.5x/XLK** | 2.23 | **3.26** | **9.29** | **+2.55%** | -0.53% | 84 | 1.63 | +7.4% | 0.006 | **PASS** |
+| **OpenDrive/5m_gap_align/SMH** | 1.47 | **2.75** | **6.81** | **+2.25%** | -0.55% | 39 | 1.87 | +7.0% | 0.028 | **PASS** |
+| Pairs/XLKvSMH_z2.0_look120 | 0.99 | 0.36 | 0.41 | +0.98% | -23.29% | 219 | 1.14 | +24.9% | 0.117 | marginal |
+| Pairs/XLKvSMH_z2.5 | 1.18 | 0.27 | 0.33 | -0.93% | -23.85% | 207 | 0.83 | +19.0% | 0.132 | marginal |
+| Pairs/SPYvQQQ_z2.5 | 0.96 | -1.68 | -3.07 | -0.66% | -1.27% | 200 | 0.80 | -1.8% | 0.007 | FAIL |
+| RangeExp/nr10_3bars/SPY | 1.27 | 0.18 | 0.20 | +0.02% | -0.21% | 31 | 1.05 | +0.0% | -0.002 | marginal |
+
+#### Portfolio Combination (locked OOS):
+
+| Config | Locked OOS Sharpe | Delta vs Baseline |
+|--------|------------------|-------------------|
+| **SPY+QQQ ORB (baseline)** | **3.35** | — |
+| + Pairs/GLDvTLT_look120 | **6.05** | **+2.70** |
+| + OpenDrive/5m_tgt3x/SMH | **4.72** | **+1.38** |
+| + OpenDrive/5m_gap_align/SMH | **4.32** | **+0.98** |
+| + OpenDrive/5m_tgt1.5x/XLK | **4.09** | **+0.75** |
+
+**Key findings:**
+1. **Pairs GLD/TLT is the strongest new edge found.** OOS Sharpe 4.86 (standalone beats baseline 3.35). Nearly zero beta (0.002). Correlation with baseline: **-0.13** (negatively correlated). Portfolio Sharpe jumps to 6.05.
+2. **OpeningDrive on tech ETFs** produces genuine OOS alpha. SMH (3.87) and XLK (3.26) both pass with strong Sortinos. Low trade counts (39-86) are a concern but the edge is consistent across variants.
+3. **Pairs XLK/SMH has massive drawdowns** (-23% to -25%) despite positive Sharpe. The spread trends during the OOS period. Not tradeable.
+4. **Pairs SPY/QQQ fails OOS** (-1.68). The spread is too efficient for mean reversion.
+5. **RangeExpansion on SPY: overfit.** Dev 1.40, OOS 0.18. Only 31 OOS trades.
+
+**Caveats on the strong results:**
+- Pairs GLD/TLT: Dev Sharpe was only 0.49 but OOS is 4.86 — this asymmetry suggests the OOS period happened to be favorable for this spread. Would need more data to confirm robustness.
+- OpenDrive trade counts (39-86 in ~84 OOS days) give limited statistical confidence.
+- These results need forward validation (paper trading) to confirm they aren't OOS-favorable flukes.
 
 ---
 
