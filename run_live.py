@@ -2,74 +2,86 @@
 """Start the live trading bot.
 
 Usage:
-    python run_live.py                          # Paper trade with default strategy
+    python run_live.py                          # Paper trade with per-symbol ORB profiles
     python run_live.py --dry-run                # Scan signals only, no orders
-    python run_live.py --strategy vwap          # Use VWAP reversion strategy
-    python run_live.py --strategy orb           # Use ORB strategy
     python run_live.py --symbols SPY            # Trade only SPY
 """
 
 import argparse
 import logging
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from trading.config import SYMBOLS, LOG_FILE
-from trading.strategies.vwap_reversion import VWAPReversion
+from trading.config import SYMBOLS, SYMBOL_PROFILES, ORB_SHARED_DEFAULTS
 from trading.strategies.orb import ORBBreakout
-from trading.strategies.rsi_reversion import RSIReversion
 from trading.live.trader import LiveTrader
 
-
-STRATEGIES = {
-    "orb": lambda: ORBBreakout(range_minutes=15, target_multiple=1.5),
-    "orb_filtered": lambda: ORBBreakout(
-        range_minutes=15, target_multiple=1.5,
-        min_atr_percentile=25, min_breakout_volume=1.2,
-    ),
-    "orb30": lambda: ORBBreakout(range_minutes=30, target_multiple=1.0),
-    "vwap": lambda: VWAPReversion(entry_std=1.5, exit_std=0.3),
-    "rsi": lambda: RSIReversion(rsi_period=14, oversold=25, overbought=75),
-}
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Live Trading Bot")
-    parser.add_argument("--strategy", choices=list(STRATEGIES.keys()),
-                        default="orb_filtered", help="Strategy to run")
-    parser.add_argument("--symbols", nargs="+", default=SYMBOLS)
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Scan signals only, no actual orders")
-    args = parser.parse_args()
+def make_orb_for_symbol(symbol: str) -> ORBBreakout:
+    """Create an ORB strategy with symbol-specific parameters."""
+    params = dict(ORB_SHARED_DEFAULTS)
+    if symbol in SYMBOL_PROFILES:
+        params.update(SYMBOL_PROFILES[symbol])
+    return ORBBreakout(**params)
 
-    # Setup logging
+
+def setup_logging():
+    """Configure logging to both console and file."""
+    os.makedirs(LOG_DIR, exist_ok=True)
+
+    from datetime import datetime
+    import pytz
+    date_str = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d")
+    log_file = os.path.join(LOG_DIR, date_str, "trader.log")
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(LOG_FILE),
+            logging.FileHandler(log_file),
         ],
     )
+    return log_file
 
-    strategy = STRATEGIES[args.strategy]()
+
+def main():
+    parser = argparse.ArgumentParser(description="ORB Live Trading Bot (SPY+QQQ)")
+    parser.add_argument("--symbols", nargs="+", default=SYMBOLS,
+                        help="Symbols to trade (default: from config)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Scan signals only, no actual orders")
+    args = parser.parse_args()
+
+    log_file = setup_logging()
     log = logging.getLogger(__name__)
 
-    log.info("Strategy: %s (%s)", strategy.name, strategy.get_params())
-    log.info("Symbols: %s", args.symbols)
-    log.info("Mode: %s", "DRY RUN" if args.dry_run else "PAPER TRADING")
+    # Build per-symbol strategies from validated profiles
+    strategies = {sym: make_orb_for_symbol(sym) for sym in args.symbols}
+
+    log.info("=" * 70)
+    log.info("ORB LIVE TRADER")
+    log.info("  Symbols: %s", args.symbols)
+    log.info("  Mode:    %s", "DRY RUN (no orders)" if args.dry_run else "PAPER TRADING")
+    log.info("  Log:     %s", log_file)
+    for sym, strat in strategies.items():
+        log.info("  %s profile: %s", sym, strat.get_params())
+    log.info("=" * 70)
 
     if not args.dry_run:
         from trading.config import ALPACA_PAPER
         if not ALPACA_PAPER:
-            log.error("ALPACA_PAPER is not set to true! Set ALPACA_PAPER=true in .env for paper trading.")
-            log.error("Refusing to start in live mode. Change .env and restart.")
+            log.error("ALPACA_PAPER is not true! Set ALPACA_PAPER=true in .env")
+            log.error("Refusing to start in live mode.")
             sys.exit(1)
 
     trader = LiveTrader(
-        strategy=strategy,
+        strategies=strategies,
         symbols=args.symbols,
         dry_run=args.dry_run,
     )

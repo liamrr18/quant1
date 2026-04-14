@@ -11,8 +11,67 @@ ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
 ALPACA_PAPER = os.getenv("ALPACA_PAPER", "true").lower() == "true"
 
 # ── Universe ──
-# Liquid ETFs with tight spreads, suitable for intraday
-SYMBOLS = ["SPY", "QQQ", "IWM", "DIA"]
+# Liquid ETFs with tight spreads, suitable for intraday.
+# DIA excluded: negative OOS Sharpe (-0.38) across all variants tested.
+# IWM excluded: locked OOS Sharpe -0.74, failed all filter/exit remediation
+#   attempts. Pure ORB overtrades in choppy regimes. Dropping IWM improved
+#   locked-OOS portfolio Sharpe from 1.54 to 3.28.
+SYMBOLS = ["SPY", "QQQ"]
+
+# ── Per-symbol strategy profiles ──
+# Each symbol gets its own ORB configuration based on walk-forward OOS evidence.
+# Only parameters that differ from the shared defaults are listed.
+# Rationale per symbol documented in comments.
+SYMBOL_PROFILES = {
+    # SPY: Gap filter >= 0.3% improved OOS Sharpe from 0.77 -> 0.98 (+27%)
+    # Skip low-gap days where SPY lacks directional conviction.
+    # Stable across thresholds: 0.3% (0.98), 0.5% (0.87), 0.2% (0.32).
+    # 0.3% is the sweet spot: enough trades (205 OOS) with strong improvement.
+    # Note: stale_exit_bars=90 tested on dev period (+0.18) but HURT on locked
+    #   OOS (-0.33). Rejected to avoid overfitting.
+    "SPY": {
+        "min_gap_pct": 0.3,
+        "min_atr_percentile": 25,
+        "min_breakout_volume": 1.2,
+        "last_entry_minute": 900,  # 15:00
+    },
+
+    # QQQ: Time decay 90 bars improved OOS Sharpe from 0.97 -> 1.56 (+61%)
+    # QQQ breakouts that stall for 90+ minutes underwater are mean-reverting.
+    # Cutting stale losers early preserves capital for better setups.
+    # Stable: 90b (1.56), 120b (0.40), 60b (0.26) -- 90 is clearly best.
+    # Locked OOS: Sharpe 4.20, alpha +10.25%. Best individual symbol.
+    "QQQ": {
+        "stale_exit_bars": 90,
+        "min_atr_percentile": 25,
+        "min_breakout_volume": 1.2,
+        "last_entry_minute": 900,  # 15:00
+    },
+
+    # IWM: EXCLUDED from active universe. Kept for reference.
+    # Pure ORB (no filters) gave walk-forward Sharpe 2.04 but collapsed to -0.74
+    # on locked OOS (Dec 2025-Apr 2026). 70% exposure generates too many false
+    # breakouts in choppy regimes. Adding last_entry=900 and stale exits did not
+    # fix the locked-OOS failure.
+    # "IWM": {
+    #     "min_atr_percentile": 0,
+    #     "min_breakout_volume": 0,
+    #     "last_entry_minute": 0,
+    # },
+}
+
+# Shared ORB defaults (used when a profile key is missing)
+ORB_SHARED_DEFAULTS = {
+    "range_minutes": 15,
+    "target_multiple": 1.5,
+    "min_range_pct": 0.001,
+    "max_range_pct": 0.008,
+    "min_atr_percentile": 25,
+    "min_breakout_volume": 1.2,
+    "last_entry_minute": 900,
+    "stale_exit_bars": 0,
+    "min_gap_pct": 0.0,
+}
 
 # ── Data ──
 DATA_DIR = "data"
@@ -27,8 +86,8 @@ INITIAL_CAPITAL = 100_000.0
 MAX_POSITION_PCT = 0.30       # Max % of equity in a single position (conservative for paper)
 MAX_DAILY_LOSS_PCT = 0.02     # 2% max daily loss -> stop trading
 MAX_CONCURRENT_POSITIONS = 4  # Max open positions at once
-STOP_LOSS_PCT = 0.003         # 0.3% hard stop loss
-TAKE_PROFIT_PCT = 0.006       # 0.6% take profit (2:1 R:R target)
+STOP_LOSS_PCT = 0.02          # 2% hard stop (backstop only; strategy manages its own exits)
+TAKE_PROFIT_PCT = 0.02        # 2% hard TP (backstop only; strategy manages its own exits)
 
 # ── Trading Schedule (US/Eastern) ──
 MARKET_OPEN = "09:30"

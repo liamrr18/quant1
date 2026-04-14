@@ -27,18 +27,34 @@ from trading.strategies.orb import ORBBreakout
 from trading.strategies.rsi_reversion import RSIReversion
 from trading.backtest.engine import run_backtest
 from trading.backtest.walkforward import walk_forward, format_results
-from trading.config import SYMBOLS
+from trading.config import SYMBOLS, SYMBOL_PROFILES, ORB_SHARED_DEFAULTS
 
 ET = pytz.timezone("America/New_York")
+
+
+def make_orb_for_symbol(symbol: str) -> ORBBreakout:
+    """Create an ORB strategy with symbol-specific parameters."""
+    params = dict(ORB_SHARED_DEFAULTS)
+    if symbol in SYMBOL_PROFILES:
+        params.update(SYMBOL_PROFILES[symbol])
+    return ORBBreakout(**params)
+
 
 STRATEGIES = {
     "orb": lambda: ORBBreakout(range_minutes=15, target_multiple=1.5),
     "orb_filtered": lambda: ORBBreakout(
         range_minutes=15, target_multiple=1.5,
         min_atr_percentile=25, min_breakout_volume=1.2,
+        last_entry_minute=15*60,
+    ),
+    "orb_base": lambda: ORBBreakout(
+        range_minutes=15, target_multiple=1.5,
+        min_atr_percentile=25, min_breakout_volume=1.2,
     ),
     "orb_tight": lambda: ORBBreakout(range_minutes=15, target_multiple=1.0),
     "orb30": lambda: ORBBreakout(range_minutes=30, target_multiple=1.0),
+    # "per_symbol" is a placeholder — actual per-symbol routing happens in main()
+    "per_symbol": None,
     "vwap": lambda: VWAPReversion(entry_std=2.0, exit_std=0.5),
     "rsi": lambda: RSIReversion(rsi_period=14, oversold=25, overbought=75),
 }
@@ -47,7 +63,7 @@ STRATEGIES = {
 def main():
     parser = argparse.ArgumentParser(description="Run strategy backtest")
     parser.add_argument("--strategy", choices=list(STRATEGIES.keys()),
-                        default="orb_filtered")
+                        default="per_symbol")
     parser.add_argument("--symbols", nargs="+", default=SYMBOLS)
     parser.add_argument("--start", default="2025-01-02")
     parser.add_argument("--end", default="2026-04-04")
@@ -65,8 +81,13 @@ def main():
     start = datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=ET)
     end = datetime.strptime(args.end, "%Y-%m-%d").replace(tzinfo=ET)
 
-    strat = STRATEGIES[args.strategy]()
-    print(f"Strategy: {strat.name} {strat.get_params()}")
+    use_per_symbol = args.strategy == "per_symbol"
+
+    if not use_per_symbol:
+        strat = STRATEGIES[args.strategy]()
+        print(f"Strategy: {strat.name} {strat.get_params()}")
+    else:
+        print("Strategy: per_symbol (symbol-specific ORB profiles)")
     print(f"Period: {args.start} to {args.end}")
     print(f"Symbols: {args.symbols}")
 
@@ -75,6 +96,13 @@ def main():
         print(f"\n{'='*60}")
         print(f"{sym}")
         print(f"{'='*60}")
+
+        # Build strategy for this symbol
+        if use_per_symbol:
+            strat = make_orb_for_symbol(sym)
+            print(f"  Profile: {strat.get_params()}")
+        else:
+            strat = STRATEGIES[args.strategy]()
 
         df = get_minute_bars(sym, start, end, use_cache=True)
         df = prepare_features(df)
