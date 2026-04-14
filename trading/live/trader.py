@@ -32,9 +32,12 @@ from trading.execution.broker import (
 from trading.risk.manager import RiskManager
 from trading.data.provider import get_client as get_data_client
 from trading.data.features import prepare_features
+from trading.alerts import alert_trade, alert_halt, alert_eod_summary, is_enabled as alerts_enabled
+from trading.discord_alerts import discord_trade, discord_halt, discord_eod
 
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+from alpaca.data.enums import DataFeed
 
 log = logging.getLogger(__name__)
 ET = pytz.timezone("America/New_York")
@@ -95,6 +98,7 @@ def fetch_live_bars(symbol: str, lookback_minutes: int = 120) -> pd.DataFrame:
         timeframe=TimeFrame.Minute,
         start=start,
         end=end,
+        feed=DataFeed.IEX,  # Free tier — SIP requires paid subscription
     )
     bars = client.get_stock_bars(req)
     df = bars.df.reset_index()
@@ -311,6 +315,15 @@ class LiveTrader:
         summary_path = os.path.join(self._log_dir, "summary.json")
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
+
+        # Send EOD email alert
+        try:
+            strat_name = "ORB" if not hasattr(self, "primary_symbol") else "Pairs"
+            if hasattr(self, "_log_base_dir") and "opendrive" in str(self._log_base_dir):
+                strat_name = "OpenDrive"
+            alert_eod_summary({strat_name: summary})
+        except Exception as e:
+            log.debug("EOD alert failed: %s", e)
 
     # ── Main Loop ──
 
@@ -576,6 +589,9 @@ class LiveTrader:
                              fill["filled_qty"], fill["filled_avg_price"], order_id)
                     self._log_trade(symbol, direction, "entry", fill["filled_qty"],
                                     fill["filled_avg_price"], None, "filled", order_id)
+                    strat_label = self._get_strategy(symbol).name
+                    discord_trade(strat_label, symbol, direction, "entry",
+                                  fill["filled_qty"], fill["filled_avg_price"])
                 else:
                     fill_status = fill.get("status", "timeout") if fill else "timeout"
                     log.warning("FILL FAILED: %s %s -> %s", side, symbol, fill_status)
@@ -650,6 +666,9 @@ class LiveTrader:
                          exit_price, pnl, reason)
                 self._log_trade(symbol, trade.direction, "exit", trade.shares,
                                 exit_price, pnl, reason, order_id)
+                strat_label = self._get_strategy(symbol).name
+                discord_trade(strat_label, symbol, trade.direction, "exit",
+                              trade.shares, exit_price, pnl=pnl, reason=reason)
             else:
                 log.warning("Close fill failed for %s, removing from tracking", symbol)
                 self._log_trade(symbol, trade.direction, "exit_failed", trade.shares,

@@ -178,3 +178,16 @@ WAVE2_MAX_DAILY_LOSS_PCT = 0.015    # 1.5% daily loss limit (tighter than ORB's 
 WAVE2_MAX_CONCURRENT_POSITIONS = 2  # Per-instance limit
 WAVE2_STOP_LOSS_PCT = 0.02          # Backstop only
 WAVE2_TAKE_PROFIT_PCT = 0.02        # Backstop only
+
+# ── Portfolio allocation weights (risk-parity, Experiment 17) ──
+# Computed from dev period covariance matrix (Jan-Nov 2025).
+# Each stream contributes equal volatility to the portfolio.
+# Verified: improves Sharpe on BOTH dev (2.90->3.05) and OOS (6.64->6.88).
+# Key: overweights low-vol Pairs (30%), underweights high-vol SMH (10.5%).
+PORTFOLIO_WEIGHTS = {
+    "ORB_SPY": 0.229,
+    "ORB_QQQ": 0.154,
+    "Pairs_GLD_TLT": 0.302,
+    "OD_SMH": 0.105,
+    "OD_XLK": 0.210,
+}
