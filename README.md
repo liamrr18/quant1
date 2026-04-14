@@ -33,13 +33,15 @@ Three new strategies are running in parallel paper trading, pending 20-day forwa
 - Robustness: 6/7 (fails subperiod consistency)
 - Caveat: dev Sharpe was only 0.49 — OOS may be regime-favorable
 
-### Combined Portfolio (backtest)
+### Combined Portfolio (backtest, risk-parity weighted)
 
 | Config | Locked OOS Sharpe | Return | MaxDD | Alpha |
 |--------|:-:|:-:|:-:|:-:|
 | ORB baseline only | 3.35 | +2.17% | -0.55% | +6.1% |
-| + XLK OpenDrive | 4.09 | +2.27% | -0.36% | +6.5% |
-| + all candidates | 6.17 | +3.56% | -0.20% | +10.3% |
+| All 5 streams (risk-parity) | 6.88 | +3.82% | -0.16% | +10.6% |
+| All 5 streams (28-month full) | 2.58 | +7.52% | -0.81% | +3.5% |
+
+Risk-parity weights: ORB SPY 22.9%, ORB QQQ 15.4%, Pairs 30.2%, OD SMH 10.5%, OD XLK 21.0%
 
 ## Setup
 
@@ -100,39 +102,77 @@ python run_backtest.py --walkforward
 python run_backtest.py --symbols SPY QQQ --start 2025-01-02 --end 2026-04-04
 ```
 
+### Monitoring
+
+```bash
+# Daily report (run after market close, or anytime)
+python daily_report.py
+python daily_report.py 2026-04-15
+
+# Weekly HTML dashboard (auto-opens in browser)
+python weekly_report.py
+
+# Forward validation (paper vs backtest comparison)
+python forward_validation.py
+
+# End-of-day alert (auto-opens Notepad — runs via Task Scheduler at 4:05 PM)
+python eod_alert.py
+```
+
 ### Research
 
 ```bash
-# Full 280-combo parallel strategy screen
-python research/full_screen_parallel.py
-
-# Robustness validation for candidates
+# Robustness validation (7-dimension check)
 python research/robustness_validation.py
 
-# Portfolio stats across all strategies
-python research/portfolio_stats.py
+# Backtest parity check (verify code matches research)
+python research/parity_check.py
+
+# Extended historical backtest (Jan 2024 - Apr 2026)
+python research/extended_backtest.py
 ```
 
 ## Project Structure
 
 ```
-trading/
-  strategies/       Signal generation (ORB, OpenDrive, PairsSpread)
-  backtest/         Backtesting engine and walk-forward validation
-  live/             Live trading loop (LiveTrader, PairsLiveTrader)
-  execution/        Alpaca order execution
-  data/             Market data fetching and feature engineering
-  risk/             Position sizing, daily loss limits, circuit breakers
-  reporting/        HTML dashboard generation
+run_live.py             ORB SPY+QQQ paper trading launcher
+run_opendrive.py        OpenDrive SMH+XLK paper trading launcher
+run_pairs.py            Pairs GLD/TLT paper trading launcher
+run_backtest.py         Backtesting CLI
+daily_report.py         Daily P&L summary across all strategies
+weekly_report.py        Weekly HTML dashboard (paper vs backtest)
+forward_validation.py   Paper trading alignment checker
+eod_alert.py            End-of-day Notepad alert
+setup_scheduler.bat     Windows Task Scheduler setup (run as admin)
 
-research/           Strategy discovery, screening, and validation scripts
-logs/               Per-day trade journals, equity curves, signal logs
-data/cache/         Cached minute-bar data
+trading/
+  strategies/           Signal generation (ORB, OpenDrive, PairsSpread)
+  backtest/             Backtesting engine and walk-forward validation
+  live/                 Live trading (LiveTrader, PairsLiveTrader)
+  execution/            Alpaca order execution (limit orders + market fallback)
+  data/                 Market data fetching and feature engineering
+  risk/                 Position sizing, daily loss limits, circuit breakers
+  reporting/            HTML dashboard generation
+  discord_alerts.py     Discord webhook trade notifications
+  alerts.py             Email alert module (optional)
+
+research/
+  EXPERIMENT_LEDGER.md  Full decision log (19 experiments)
+  robustness_validation.py   7-dimension validation suite
+  parity_check.py            Backtest parity verification
+  extended_backtest.py       Extended history analysis
+  archive/                   Completed research scripts (29 files)
+
+logs/                   ORB paper trading logs (per-day)
+logs/opendrive/         OpenDrive paper trading logs
+logs/pairs/             Pairs paper trading logs
+data/cache/             Cached minute-bar data (Jan 2024 - Apr 2026)
 ```
 
 ## Methodology
 
 - **Validation**: Walk-forward (60-day train, 20-day test, 20-day step) on dev period, locked OOS holdout
+- **Data**: Jan 2024-Apr 2026 (28 months, extended); strategies tuned on Jan-Nov 2025 only
 - **Data splits**: Dev Jan-Nov 2025, Locked OOS Dec 2025-Apr 2026
 - **Cost model**: $0.01/share slippage, $0.00 commission (Alpaca)
 - **Position sizing**: 30% of equity per trade (20% for candidates)
