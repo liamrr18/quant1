@@ -35,6 +35,7 @@ from trading.data.features import prepare_features
 
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+from alpaca.data.enums import DataFeed
 
 log = logging.getLogger(__name__)
 ET = pytz.timezone("America/New_York")
@@ -95,6 +96,7 @@ def fetch_live_bars(symbol: str, lookback_minutes: int = 120) -> pd.DataFrame:
         timeframe=TimeFrame.Minute,
         start=start,
         end=end,
+        feed=DataFeed.IEX,  # Free tier — SIP requires paid subscription
     )
     bars = client.get_stock_bars(req)
     df = bars.df.reset_index()
