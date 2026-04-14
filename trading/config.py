@@ -127,3 +127,54 @@ REPORTS_DIR = "reports"
 
 # ── Logging ──
 LOG_FILE = "trader.log"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WAVE 2 CANDIDATE STRATEGIES (Experiment 15)
+# FROZEN from research. DO NOT TUNE without new locked OOS evidence.
+# These are paper-trading candidates, not yet production-approved.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Pairs Spread: GLD vs TLT ──
+# Locked OOS: Sharpe 4.86, alpha +15.1%, beta 0.002, 228 trades
+# Dev Sharpe: 0.49 (weaker — requires forward validation)
+PAIRS_GLD_TLT = {
+    "primary_symbol": "GLD",
+    "secondary_symbol": "TLT",
+    "lookback": 120,
+    "entry_zscore": 2.0,
+    "exit_zscore": 0.5,
+    "stale_bars": 90,
+    "last_entry_minute": 900,
+}
+
+# ── Opening Drive: SMH ──
+# Locked OOS: Sharpe 3.87, alpha +17.1%, 86 trades, PF 1.91
+# Dev Sharpe: 1.33
+OPENDRIVE_SMH = {
+    "drive_minutes": 5,
+    "min_drive_pct": 0.10,
+    "target_multiple": 3.0,
+    "stop_multiple": 1.0,
+    "stale_bars": 120,
+    "last_entry_minute": 720,
+}
+
+# ── Opening Drive: XLK ──
+# Locked OOS: Sharpe 3.26, alpha +7.4%, 84 trades, PF 1.63
+# Dev Sharpe: 2.23
+OPENDRIVE_XLK = {
+    "drive_minutes": 5,
+    "min_drive_pct": 0.10,
+    "target_multiple": 1.5,
+    "stop_multiple": 1.0,
+    "stale_bars": 120,
+    "last_entry_minute": 720,
+}
+
+# ── Wave 2 risk parameters (conservative for paper validation) ──
+WAVE2_MAX_POSITION_PCT = 0.20       # 20% per position (conservative vs 30% for ORB)
+WAVE2_MAX_DAILY_LOSS_PCT = 0.015    # 1.5% daily loss limit (tighter than ORB's 2%)
+WAVE2_MAX_CONCURRENT_POSITIONS = 2  # Per-instance limit
+WAVE2_STOP_LOSS_PCT = 0.02          # Backstop only
+WAVE2_TAKE_PROFIT_PCT = 0.02        # Backstop only

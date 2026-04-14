@@ -43,15 +43,17 @@ ET = pytz.timezone("America/New_York")
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "logs")
 
 
-def _ensure_log_dir():
-    os.makedirs(LOG_DIR, exist_ok=True)
-    date_dir = os.path.join(LOG_DIR, now_et().strftime("%Y-%m-%d"))
+def _ensure_log_dir(base_dir=None):
+    base = base_dir or LOG_DIR
+    os.makedirs(base, exist_ok=True)
+    date_dir = os.path.join(base, now_et().strftime("%Y-%m-%d"))
     os.makedirs(date_dir, exist_ok=True)
     return date_dir
 
 
-def _today_log_dir():
-    return os.path.join(LOG_DIR, now_et().strftime("%Y-%m-%d"))
+def _today_log_dir(base_dir=None):
+    base = base_dir or LOG_DIR
+    return os.path.join(base, now_et().strftime("%Y-%m-%d"))
 
 
 @dataclass
@@ -122,7 +124,7 @@ class LiveTrader:
     """
 
     def __init__(self, strategy=None, symbols: list[str] = None, dry_run: bool = False,
-                 strategies: dict = None):
+                 strategies: dict = None, log_base_dir: str = None):
         self.strategies = strategies or {}
         self.default_strategy = strategy
         self.symbols = symbols or SYMBOLS
@@ -130,6 +132,7 @@ class LiveTrader:
         self.active_trades: dict[str, ActiveTrade] = {}
         self.risk_manager: RiskManager | None = None
         self.running = True
+        self._log_base_dir = log_base_dir or LOG_DIR
 
         # Logging state
         self._log_dir = None
@@ -217,7 +220,7 @@ class LiveTrader:
 
     def startup(self):
         self._session_start = now_et()
-        self._log_dir = _ensure_log_dir()
+        self._log_dir = _ensure_log_dir(self._log_base_dir)
         self._init_trade_journal()
         self._init_equity_log()
         self._init_signal_log()
@@ -487,6 +490,17 @@ class LiveTrader:
     # ── Signal Scanning ──
 
     def _scan_for_signals(self):
+        # Global position check: all traders share one Alpaca account
+        try:
+            all_positions = get_all_positions()
+            from trading.config import MAX_CONCURRENT_POSITIONS
+            if len(all_positions) >= MAX_CONCURRENT_POSITIONS:
+                log.warning("GLOBAL LIMIT: %d positions across all instances (max %d)",
+                           len(all_positions), MAX_CONCURRENT_POSITIONS)
+                return
+        except Exception as e:
+            log.error("Error checking global positions: %s", e)
+
         for symbol in self.symbols:
             if symbol in self.active_trades:
                 continue  # Exits handled by _check_strategy_exits
