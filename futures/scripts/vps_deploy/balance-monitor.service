@@ -1,0 +1,17 @@
+[Unit]
+Description=Balance and health monitor
+After=ibgateway.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+Environment=PATH=/opt/trader_env/bin:/usr/bin:/bin
+ExecStart=/opt/trader_env/bin/python -u /root/balance_monitor.py
+Restart=always
+RestartSec=60
+StandardOutput=append:/var/log/balance_monitor.log
+StandardError=append:/var/log/balance_monitor.log
+
+[Install]
+WantedBy=multi-user.target

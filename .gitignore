@@ -1,0 +1,31 @@
+# secrets
+.env
+.env.local
+*.pem
+*.key
+
+# IB Gateway / IBC config with credentials
+**/ibc_config.ini
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# data and logs
+**/data/cache/
+**/logs/
+**/reports/
+*.log
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# claude local state
+.claude/

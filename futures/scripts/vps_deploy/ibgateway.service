@@ -1,0 +1,18 @@
+[Unit]
+Description=IB Gateway (via IBC + Xvfb)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Environment="DISPLAY=:1"
+ExecStartPre=/bin/bash -c "pkill -9 Xvfb; pkill -9 java; sleep 2"
+ExecStartPre=/usr/bin/Xvfb :1 -screen 0 1280x1024x24 &
+ExecStart=/opt/ibc/scripts/ibcstart.sh 1037 -g --tws-path=/opt/ibgateway --ibc-path=/opt/ibc --ibc-ini=/opt/ibc/config.ini --mode=paper
+Restart=always
+RestartSec=30
+StandardOutput=append:/var/log/ibgateway.log
+StandardError=append:/var/log/ibgateway.log
+
+[Install]
+WantedBy=multi-user.target

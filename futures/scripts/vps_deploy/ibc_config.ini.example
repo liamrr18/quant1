@@ -1,0 +1,29 @@
+# IBC config.ini — unattended IB Gateway login
+# Copy to ibc_config.ini and fill in real values. Do not commit.
+
+# --- Account ---
+IbLoginId=YOUR_IB_USERNAME
+IbPassword=YOUR_IB_PASSWORD
+TradingMode=paper
+
+# --- Behavior ---
+FIX=no
+IbDir=
+StoreSettingsOnServer=no
+
+ClosedownAt=
+ReadOnlyApi=no
+AcceptNonBrokerageAccountWarning=yes
+AcceptIncomingConnectionAction=accept
+AllowBlindTrading=yes
+DismissPasswordExpiryWarning=yes
+DismissNSEComplianceNotice=yes
+ExistingSessionDetectedAction=primary
+
+# --- API ---
+OverrideTwsApiPort=4002
+ReloginAfterSecondFactorAuthenticationTimeout=yes
+SecondFactorAuthenticationExitInterval=60
+
+# --- Logging ---
+LogComponents=never
